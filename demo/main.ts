@@ -6,6 +6,7 @@ import {
 
 const logEl = document.getElementById('log') as HTMLDivElement;
 const deviceNameInput = document.getElementById('deviceName') as HTMLInputElement;
+const btnSelectDevice = document.getElementById('btnSelectDevice') as HTMLButtonElement;
 const btnConnect = document.getElementById('btnConnect') as HTMLButtonElement;
 const btnDisconnect = document.getElementById('btnDisconnect') as HTMLButtonElement;
 const btnMute = document.getElementById('btnMute') as HTMLButtonElement;
@@ -43,6 +44,27 @@ manager.on('unmuted-mic', () => appendLog('Event: unmuted-mic', 'event'));
 manager.on('incoming-call', () => appendLog('Event: incoming-call', 'event'));
 manager.on('call-answered', () => appendLog('Event: call-answered', 'event'));
 manager.on('call-rejected', () => appendLog('Event: call-rejected', 'event'));
+
+btnSelectDevice.addEventListener('click', async () => {
+  if (typeof navigator.hid === 'undefined') {
+    appendLog('WebHID is not supported in this browser', 'error');
+    return;
+  }
+  try {
+    const devices = await navigator.hid.requestDevice({ filters: [] });
+    if (devices.length === 0) {
+      appendLog('No device selected', 'info');
+      return;
+    }
+    const selected = devices[0];
+    const label = selected.productName ?? `Vendor ${selected.vendorId} Product ${selected.productId}`;
+    deviceNameInput.value = label;
+    appendLog(`Selected device: ${label}`, 'info');
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    appendLog(`Select device failed: ${message}`, 'error');
+  }
+});
 
 btnConnect.addEventListener('click', async () => {
   const name = deviceNameInput.value.trim();
