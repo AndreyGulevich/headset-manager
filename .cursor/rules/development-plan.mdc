@@ -1,0 +1,435 @@
+---
+alwaysApply: true
+glob: "src/**/*.ts"
+description: Поэтапный план разработки проекта headset-manager
+---
+
+Данный план предназначен для пошаговой реализации проекта с помощью ИИ (Cursor). Каждый этап содержит конкретные задачи и ожидаемые результаты. Следуйте этому плану последовательно, не переходя к следующему этапу, пока предыдущий не завершён и не протестирован (где применимо).
+
+Этап 0: Настройка проекта и установка зависимостей
+Задачи:
+
+Создать корневую папку проекта src/.
+
+Инициализировать package.json:
+
+Указать тип модуля: "type": "module" (или "commonjs", в зависимости от целевой платформы; для браузерной библиотеки лучше "module").
+
+Добавить зависимости:
+
+typescript (dev)
+
+jest, @types/jest, ts-jest (dev)
+
+mitt (опционально, для событий)
+
+@types/w3c-web-hid (dev)
+
+Добавить скрипты: build, test, dev (для демо).
+
+Создать tsconfig.json с настройками:
+
+target: es2020
+
+module: esnext (или commonjs для совместимости)
+
+strict: true
+
+declaration: true
+
+outDir: ./dist
+
+Создать структуру папок по FSD (пустые папки и файлы-заглушки):
+
+src/
+├── entities/
+│   ├── headset/
+│   │   └── index.ts
+│   └── searcher/
+│       └── index.ts
+├── features/
+│   └── manage-headset/
+│       └── index.ts
+├── shared/
+│   ├── errors/
+│   │   └── index.ts
+│   ├── types/
+│   │   └── index.ts
+│   └── utils/
+│       └── event-emitter.ts (если не используем mitt)
+├── demo/
+│   └── index.html (пустой)
+└── index.ts (точка входа библиотеки)
+Настроить Jest: создать jest.config.js для работы с TypeScript.
+
+Создать .gitignore и .cursor/rules/ с правилами, разработанными ранее.
+
+Проверить, что все базовые конфигурации работают (скомпилировать пустой проект).
+
+Результат: Готовое окружение для разработки: все конфигурационные файлы, структура папок, зависимости установлены.
+
+Этап 1: Инициализация проекта и базовая структура
+Задачи:
+Создать корневую папку проекта headset-manager.
+
+Инициализировать package.json:
+
+Указать тип модуля: "type": "module" (или "commonjs", в зависимости от целевой платформы; для браузерной библиотеки лучше "module").
+
+Добавить зависимости:
+
+typescript
+
+jest, @types/jest, ts-jest (для тестирования)
+
+mitt (или аналогичный легковесный event emitter) – опционально.
+
+@types/w3c-web-hid (для типов WebHID)
+
+Добавить скрипты: build, test, dev (для демо).
+
+Создать tsconfig.json с настройками:
+
+target: es2020
+
+module: esnext (или commonjs для совместимости)
+
+strict: true
+
+declaration: true (для генерации .d.ts)
+
+outDir: ./dist
+
+Создать структуру папок по FSD:
+
+text
+src/
+├── entities/
+│   ├── headset/
+│   │   ├── index.ts
+│   │   ├── types.ts
+│   │   └── base-headset.ts
+│   └── searcher/
+│       ├── index.ts
+│       ├── types.ts
+│       └── base-searcher.ts
+├── features/
+│   └── manage-headset/
+│       ├── index.ts
+│       └── headset-manager.ts
+├── shared/
+│   ├── errors/
+│   │   ├── index.ts
+│   │   └── codes.ts
+│   ├── types/
+│   │   └── index.ts
+│   └── utils/
+│       └── event-emitter.ts (если не используем mitt)
+├── demo/
+│   └── index.html (пока пустой)
+└── index.ts (точка входа библиотеки)
+Настроить Jest: создать jest.config.js для работы с TypeScript.
+
+Создать .gitignore и .cursor/rules/ с правилами, разработанными ранее.
+
+Результат: Проект готов к разработке, все конфигурационные файлы на месте, структура папок соответствует FSD.
+
+Этап 2: Определение общих типов и ошибок
+Задачи:
+В shared/types/index.ts определить:
+
+TCapabilities (объект с булевыми полями: canMute, canAnswer, canReject, canHandleCall, canSetIncomingCall и т.д.)
+
+TDeviceInfo (информация об устройстве: id, name, vendorId, productId, capabilities? – опционально)
+
+Типы событий: THeadSetEventMap (например, incoming-call, muted-mic, unmuted-mic, call-answered, call-rejected и др.)
+
+В shared/errors/codes.ts определить константы кодов ошибок:
+
+ts
+export const ErrorCode = {
+  DEVICE_NOT_FOUND: 'ID_DEVICE_NOT_FOUND',
+  EVENT_NOT_SUPPORTED: 'ID_EVENT_NOT_SUPPORTED',
+  DEVICE_DISCONNECTED: 'ID_DEVICE_DISCONNECTED',
+  OPERATION_FAILED: 'ID_OPERATION_FAILED',
+  // ... другие по необходимости
+} as const;
+В shared/errors/index.ts создать классы ошибок, наследующие Error:
+
+DeviceNotFoundError
+
+EventNotSupportedError
+
+DeviceDisconnectedError
+
+OperationFailedError
+Каждый класс должен принимать сообщение и содержать поле code.
+
+Создать объект errors с функциями-предикатами:
+
+ts
+export const errors = {
+  hasDeviceNotFoundError: (error: unknown): boolean => error instanceof DeviceNotFoundError,
+  hasEventNotSupportedError: (error: unknown): boolean => error instanceof EventNotSupportedError,
+  // ... остальные
+};
+Экспортировать всё из shared/errors/index.ts и shared/types/index.ts через src/index.ts (пока закомментировать, но подготовить).
+
+Результат: Имеются базовые типы и система ошибок, готовая к использованию.
+
+Этап 3: Интерфейсы и абстрактные классы сущностей
+Задачи:
+В entities/headset/types.ts определить интерфейс THeadSet:
+
+ts
+export interface THeadSet {
+  on(event: string, callback: Function): void;
+  off(event: string, callback: Function): void;
+  send(data: unknown): Promise<void>; // или конкретный тип команды
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  getCapabilities(): TCapabilities;
+}
+(Можно сделать send более типизированным, например send(command: TCommand)).
+
+В entities/headset/base-headset.ts создать абстрактный класс BaseHeadSet, реализующий общую логику событий (если используем mitt или встроенный EventTarget).
+
+В entities/searcher/types.ts определить интерфейс TDeviceSearcher:
+
+ts
+export interface TDeviceSearcher {
+  getDevices(): Promise<TDeviceInfo[]>;
+  findDeviceByName(name: string): Promise<TDeviceInfo | null>;
+}
+В entities/searcher/base-searcher.ts создать абстрактный класс, если нужна общая логика (пока не обязательно).
+
+Результат: Чётко заданы контракты для будущих реализаций.
+
+Этап 4: Реализация WebHidSearcher (сущность поиска)
+Задачи:
+Создать файл entities/searcher/webhid-searcher.ts.
+
+Реализовать класс WebHidSearcher, имплементирующий TDeviceSearcher.
+
+В конструкторе принимать navigator.hid (или использовать глобальный объект).
+
+Метод getDevices():
+
+Запросить доступные устройства через hid.getDevices().
+
+Отфильтровать только те, которые поддерживают нужные сигналы? Пока можно возвращать все, но в дальнейшем можно добавить фильтр по vendorId/productId или по наличию определённых reportId.
+
+Преобразовать HIDDevice в TDeviceInfo (извлечь productName как имя, vendorId, productId).
+
+Метод findDeviceByName(name: string):
+
+Получить все устройства и найти первое, у которого productName содержит или равно name (можно использовать includes или точное совпадение в зависимости от требований).
+
+Добавить обработку ошибок: если HID не поддерживается браузером, выбрасывать соответствующую ошибку.
+
+Экспортировать класс из entities/searcher/index.ts.
+
+Результат: Работает поиск WebHID-устройств.
+
+Этап 5: Реализация WebHidHeadSet (сущность гарнитуры)
+Задачи:
+Создать файл entities/headset/webhid-headset.ts.
+
+Реализовать класс WebHidHeadSet, имплементирующий THeadSet и наследующий BaseHeadSet (если создан).
+
+Конструктор принимает device: HIDDevice.
+
+Метод connect():
+
+Открыть устройство: device.open().
+
+Подписаться на события inputreport для получения данных от устройства.
+
+Метод disconnect():
+
+Закрыть устройство: device.close().
+
+Убрать подписки.
+
+Метод send(data: unknown):
+
+Преобразовать данные в формат, понятный устройству (например, Uint8Array).
+
+Отправить через device.sendReport или device.sendFeatureReport в зависимости от спецификации.
+
+Метод getCapabilities():
+
+Определить поддерживаемые функции на основе информации об устройстве (можно пока заглушку, позже доработать).
+
+Обработка inputreport:
+
+Парсить данные, генерировать события (например, при нажатии кнопки mute вызывать this.emit('muted-mic')).
+
+Использовать BaseHeadSet для управления подписками (если реализован).
+
+Экспортировать класс из entities/headset/index.ts.
+
+Результат: Можно подключаться к конкретному устройству, отправлять команды и получать события.
+
+Этап 6: Реализация HeadSetManager (фасад)
+Задачи:
+Создать файл features/manage-headset/headset-manager.ts.
+
+Реализовать класс HeadSetManager:
+
+Приватные поля: currentDevice: THeadSet | null, searcher: TDeviceSearcher, eventEmitter (для внешних событий).
+
+Конструктор принимает searcher: TDeviceSearcher.
+
+Метод connect(deviceName: string): Promise<void>:
+
+Найти устройство через searcher.findDeviceByName(deviceName).
+
+Если не найдено, выбросить DeviceNotFoundError.
+
+Создать экземпляр WebHidHeadSet (или другой, если в будущем появятся другие типы). Пока жёстко создаём WebHidHeadSet.
+
+Вызвать device.connect() и сохранить в currentDevice.
+
+Пробросить события от устройства наружу через eventEmitter.
+
+Метод disconnect(): Promise<void>:
+
+Если есть currentDevice, вызвать его disconnect() и обнулить.
+
+Метод getCapabilities(): TCapabilities:
+
+Вернуть currentDevice?.getCapabilities() или пустой объект, если нет устройства.
+
+Метод send(command: unknown): Promise<void>:
+
+Пробросить в currentDevice.send(command).
+
+Методы on(event: string, callback: Function) и off(...) для подписки на события менеджера.
+
+Добавить логирование ошибок, проброс ошибок от устройства наружу.
+
+Экспортировать класс из features/manage-headset/index.ts.
+
+Результат: Готов основной API библиотеки.
+
+Этап 7: Тестирование (Jest)
+Задачи:
+Написать тесты для shared/errors (проверка классов и предикатов).
+
+Написать тесты для WebHidSearcher:
+
+Мок navigator.hid.getDevices().
+
+Проверить, что возвращаются корректные TDeviceInfo.
+
+Проверить поиск по имени.
+
+Написать тесты для WebHidHeadSet:
+
+Мок HIDDevice с методами open, close, sendReport, addEventListener, removeEventListener.
+
+Проверить, что connect вызывает open и подписывается на события.
+
+Проверить, что disconnect вызывает close и отписывается.
+
+Проверить, что при получении inputreport генерируются правильные события.
+
+Написать тесты для HeadSetManager:
+
+Мок searcher и WebHidHeadSet.
+
+Проверить успешное подключение, выброс ошибки при отсутствии устройства.
+
+Проверить проброс событий.
+
+Проверить методы send, disconnect.
+
+Убедиться, что покрытие ключевых сценариев достаточное.
+
+Результат: Все модули покрыты юнит-тестами, тесты проходят.
+
+Этап 8: Создание демо-страницы
+Задачи:
+В папке demo создать index.html с простым интерфейсом:
+
+Поле для ввода названия устройства (search).
+
+Кнопка "Find and Connect".
+
+Кнопки: "Mute", "Unmute", "Answer", "Reject", "Get Capabilities".
+
+Лог-панель для отображения событий и ошибок.
+
+Создать скрипт demo/index.ts (или .js), который:
+
+Импортирует библиотеку (из dist или напрямую из src, если настроен сборщик).
+
+Создаёт экземпляр HeadSetManager с WebHidSearcher.
+
+Подписывается на события и выводит их в лог.
+
+Обрабатывает нажатия кнопок, вызывает соответствующие методы.
+
+Настроить сборку демо (можно использовать vite или простой live-server с компиляцией TypeScript в js). Либо использовать parcel для простоты.
+
+Проверить в браузере (подключив реальное устройство или эмуляцию).
+
+Результат: Есть рабочая демо-страница для ручного тестирования.
+
+Этап 9: Документация
+Задачи:
+Написать JSDoc для всех публичных методов и классов:
+
+HeadSetManager
+
+WebHidHeadSet (если публичный)
+
+WebHidSearcher
+
+Типы и ошибки.
+
+Обновить README.md:
+
+Краткое описание проекта.
+
+Установка (npm install headset-manager).
+
+Быстрый старт с примером кода.
+
+Ссылка на демо.
+
+Схема mermaid (из архитектуры).
+
+Описание API (основные методы, события, ошибки).
+
+Информация о поддержке браузеров (WebHID).
+
+Убедиться, что в корне есть LICENSE (например, MIT).
+
+Проверить, что все публичные функции экспортируются из src/index.ts и типы доступны.
+
+Результат: Полная документация для разработчиков.
+
+Этап 10: Финальное ревью и доработка
+Задачи:
+Провести самопроверку кода на соответствие правилам из coding-standards.mdc.
+
+Запустить тесты и убедиться, что всё зелёное.
+
+Проверить демо на реальных устройствах (если доступны) или симуляцию.
+
+Исправить возможные баги и недочёты.
+
+Обновить план и правила при необходимости.
+
+Результат: Проект готов к публикации (можно сделать npm publish).
+
+Примечания для ИИ
+Каждый этап должен быть выполнен последовательно. После завершения этапа сообщайте о результате и запрашивайте переход к следующему.
+
+При реализации следуйте правилам из .cursor/rules/.
+
+Если возникают неоднозначности, уточняйте их у пользователя.
+
+Для сложных моментов (например, парсинг inputreport) можно создать заглушку и доработать позже, но лучше сразу заложить расширяемость.
