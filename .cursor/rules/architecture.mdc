@@ -1,0 +1,103 @@
+---
+description: Архитектура проекта по FSD (Feature-Sliced Design)
+glob: "src/**/*.ts"
+alwaysApply: true
+---
+
+# Архитектура проекта headset-manager (FSD)
+
+Проект следует методологии Feature-Sliced Design. Основные слои:
+
+src/
+├── app/ # Инициализация, провайдеры (пока не нужно)
+├── processes/ # Бизнес-процессы (пока не нужно)
+├── pages/ # Демо-страница (позже)
+├── features/ # Фичи: управление устройствами, поиск, подключение
+├── entities/ # Сущности: HeadSet, DeviceSearcher, Capabilities
+├── shared/ # Переиспользуемые утилиты, типы, константы, ошибки
+└── index.ts # Точка входа
+
+
+## Связи между сущностями
+
+```mermaid
+classDiagram
+    class HeadSetManager {
+        -currentDevice: HeadSet
+        +connect(deviceName: string): Promise~void~
+        +disconnect(): void
+        +getCapabilities(): TCapabilities
+        +on(event: string, callback: Function): void
+        +off(event: string, callback: Function): void
+        +send(command: string): void
+    }
+
+    class HeadSet {
+        <<interface>>
+        +on(event: string, callback: Function): void
+        +off(event: string, callback: Function): void
+        +send(data: any): void
+        +connect(): Promise~void~
+        +disconnect(): void
+        +getCapabilities(): TCapabilities
+    }
+
+    class WebHidHeadSet {
+        -device: HIDDevice
+        +connect()
+        +disconnect()
+        +send(command)
+    }
+
+    class DeviceSearcher {
+        <<interface>>
+        +getDevices(): Promise~TDeviceInfo[]~
+        +findDeviceByName(name: string): Promise~TDeviceInfo | null~
+    }
+
+    class WebHidSearcher {
+        -hid: HID
+        +getDevices()
+        +findDeviceByName(name)
+    }
+
+    class TCapabilities {
+        +canMute: boolean
+        +canAnswer: boolean
+        +canReject: boolean
+        +canHandleCall: boolean
+    }
+
+    class errors {
+        +hasDeviceNotFoundError(error: unknown): boolean
+        +hasEventNotSupportedError(error: unknown): boolean
+    }
+
+    HeadSetManager --> HeadSet : использует
+    HeadSetManager --> DeviceSearcher : использует
+    WebHidHeadSet --|> HeadSet
+    WebHidSearcher --|> DeviceSearcher
+    HeadSetManager --> errors : использует для проверки ошибок
+```
+
+Принципы
+Интерфейсы и абстракции: все зависимости строятся на интерфейсах, чтобы в будущем легко подменить WebHid на Bluetooth.
+
+Ошибки: стандартизированные классы ошибок (например, DeviceNotFoundError) и функции-предикаты в объекте errors.
+
+События: менеджер и устройство должны быть event-emitter'ами (можно использовать EventTarget или mitt).
+
+Тестирование: каждый слой тестируется изолированно с моками зависимостей.
+
+Специфика FSD для этого проекта
+entities/headset – содержит интерфейс HeadSet, базовый класс BaseHeadSet, реализацию WebHidHeadSet.
+
+entities/searcher – интерфейс DeviceSearcher, реализация WebHidSearcher.
+
+features/manage-headset – фасад HeadSetManager, который использует searcher и создаёт нужные экземпляры HeadSet.
+
+shared/api/errors – коды ошибок и предикаты.
+
+shared/lib/event-emitter – утилита для событий.
+
+shared/types – общие типы (TCapabilities, THeadSet, TDeviceInfo).
