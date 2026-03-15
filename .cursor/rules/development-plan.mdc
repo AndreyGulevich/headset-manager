@@ -48,7 +48,7 @@ src/
 │   └── searcher/
 │       └── index.ts
 ├── features/
-│   └── manage-headset/
+│   └── HeadSetManager/
 │       └── index.ts
 ├── shared/
 │   ├── errors/
@@ -114,9 +114,9 @@ src/
 │       ├── types.ts
 │       └── base-searcher.ts
 ├── features/
-│   └── manage-headset/
+│   └── HeadSetManager/
 │       ├── index.ts
-│       └── headset-manager.ts
+│       └── HeadSetManager.ts
 ├── shared/
 │   ├── errors/
 │   │   ├── index.ts
@@ -273,7 +273,7 @@ export interface TDeviceSearcher {
 
 Этап 6: Реализация HeadSetManager (фасад)
 Задачи:
-Создать файл features/manage-headset/headset-manager.ts.
+Создать файл features/HeadSetManager/HeadSetManager.ts.
 
 Реализовать класс HeadSetManager:
 
@@ -309,7 +309,7 @@ export interface TDeviceSearcher {
 
 Добавить логирование ошибок, проброс ошибок от устройства наружу.
 
-Экспортировать класс из features/manage-headset/index.ts.
+Экспортировать класс из features/HeadSetManager/index.ts.
 
 Результат: Готов основной API библиотеки.
 

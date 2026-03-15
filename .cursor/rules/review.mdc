@@ -47,7 +47,7 @@ glob: "src/**/*"
 
 ## Пример оформления замечания
 ```
-Файл: src/features/manage-headset/HeadSetManager.ts:42
+Файл: src/features/HeadSetManager/HeadSetManager.ts:42
 Проблема: Функция connect принимает булев флаг forceReconnect, что является флагом в аргументе (F3: Флаги в аргументах).
 Предложение: Разделить на две функции: connect и reconnect или вынести флаг в параметры конфигурации.
 ```

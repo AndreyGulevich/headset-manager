@@ -92,9 +92,9 @@ classDiagram
 Специфика FSD для этого проекта
 entities/headset – содержит интерфейс HeadSet, базовый класс BaseHeadSet, реализацию WebHidHeadSet.
 
-entities/searcher – интерфейс DeviceSearcher, реализация WebHidSearcher.
+entities/WebHidSearcher – интерфейс TDeviceSearcher, реализация WebHidSearcher.
 
-features/manage-headset – фасад HeadSetManager, который использует searcher и создаёт нужные экземпляры HeadSet.
+features/HeadSetManager – фасад HeadSetManager, который использует searcher и создаёт нужные экземпляры HeadSet.
 
 shared/api/errors – коды ошибок и предикаты.
 
