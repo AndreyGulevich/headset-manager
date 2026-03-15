@@ -10,13 +10,15 @@
     "test:coverage": "node -r ts-node/register --experimental-vm-modules node_modules/jest/bin/jest.js --config config/jest.config.ts --coverage",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "start": "vite --open"
+    "start": "vite --open",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^29.5.12",
     "@types/w3c-web-hid": "^1.0.6",
     "eslint": "^10.0.3",
+    "husky": "^9.1.7",
     "jest": "^29.7.0",
     "jiti": "^2.6.1",
     "ts-jest": "^29.2.0",
