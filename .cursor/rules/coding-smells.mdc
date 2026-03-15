@@ -1,0 +1,2319 @@
+---
+description: Правила оформления кода, нейминга, запахи и эвристические правила
+glob: "src/**/*.ts"
+alwaysApply: true
+---
+
+We follow the coding convention
+
+- [https://github.com/airbnb/javascript](https://github.com/airbnb/javascript)
+- [https://github.com/airbnb/javascript/tree/master/react](https://github.com/airbnb/javascript/tree/master/react)
+
+And some custom convention.
+
+## Naming
+
+- **Function, method Naming**:
+{action}{target}{scoupe}{?parent scoupe}
+
+    ```js
+    // bad
+    const connectionStateUserHasActive = () => {};
+
+    // bad
+    const hasActiveUserConnectionState = () => {};
+
+    // good
+    const hasActiveConnectionStateUser = () => {};
+    ```
+
+- **Callbacks**: Do not use general terms to describe the callback, the function should describe its action
+
+    ```js
+    // bad
+    element.addEventListener('click', onClick);
+
+    // bad
+    element.addEventListener('click', handleClick);
+
+    // good
+    element.addEventListener('click', callToServer);
+    ```
+
+- **Props groping**:
+
+1. Shortly *disabled*
+2. With constant *type="fancy"*
+3. With values *color={color}*
+4. Handlers *onSubmit={submit}*
+
+    ```jsx
+    // bad
+    <MyComponent color={color} onSubmit={submit} type="fancy" disabled />
+
+
+    // good
+    <MyComponent disabled  type="fancy" color={color} onSubmit={submit} />
+
+    ```
+
+# Запахи и эвристические правила
+
+## Комментарии
+
+### C4: Плохо написанный комментарий
+
+<details><summary>Описание</summary>
+
+Если уж вы беретесь за написание комментария, напишите его хорошо. Не жалейте времени и позаботьтесь о том, чтобы это был лучший комментарий, который вы способны создать. Тщательно выбирайте слова. Следите за правильностью орфографии и пунктуации. Не пишите сумбурно. Не объясняйте очевидное. Будьте лаконичны.
+
+</details>
+
+## Функции
+
+### F1: Слишком много аргументов
+
+<details><summary>Описание</summary>
+
+Функции должны иметь небольшое количество аргументов. Лучше всего, когда аргументов вообще нет. В длинных списках параметров трудно разобраться. Они зачастую противоречивы и сложны в применении, а кроме того, их приходится вечно изменять по мере возникновения необходимости новых данных.
+
+#### Пример №1
+
+##### Плохо
+
+В классе сбора статистики по траффику имеется функция getSentVideoTraffic, которая подсчитывает количество отправленного видео траффика и форматирует результат перед его возвращением, если флаг isActiveAutoFormatTraffic активен.
+
+```ts
+class StatisticsCollector {
+  getSentVideoTraffic() {
+    const sentVideoTrafficInBytes = this.sentUserVideoTraffic + this.sentShareVideoTraffic;
+    const formatType = this.isActiveAutoFormatTraffic ? 'Mb' : 'bytes';
+
+    return this.formatTraffic(sentVideoTrafficInBytes, formatType);
+  }
+
+  formatTraffic(trafficInBytes: number, formatType: TFormatType) {
+    switch (formatType) {
+      case 'bytes':
+        return trafficInBytes;
+      case 'Mb':
+        return trafficInBytes / 1_048_576;
+    }
+  }
+}
+```
+
+Функция formatTraffic принимает параметр formatType, который та может вычистить самостоятельно. Такой подход является одной из форм дублирования, усложняющего вызывающую функцию getSentVideoTraffic.
+
+##### Хорошо
+
+- Примените рефакторинг "Извлечение функции" к выражению вычисления параметра.
+- Замените обращение к параметру обращением к функции, возвращающей значение параметра.
+
+```ts
+class StatisticsCollector {
+  getSentVideoTraffic() {
+    const sentVideoTrafficInBytes = this.sentUserVideoTraffic + this.sentShareVideoTraffic;
+
+    return this.formatTraffic(sentVideoTrafficInBytes);
+  }
+
+  formatTraffic(trafficInBytes: number) {
+    switch (this.formatType) {
+      case 'bytes':
+        return trafficInBytes;
+      case 'Mb':
+        return trafficInBytes / 1_000_000;
+    }
+  }
+
+  get formatType() {
+    return this.isActiveAutoFormatTraffic ? 'Mb' : 'bytes';
+  }
+}
+```
+
+#### Пример №2
+
+##### Плохо
+
+Функция startPresentationWithSyncState запускает презентацию cо статусом активности микрофона, если отправляемый медиа-поток имеет аудио-треки.
+
+```ts
+class ScreenShare {
+  startPresentationWithSyncState(mediaStream: MediaStream, isExistsAudioTracks: boolean) {
+    this.stopPresentation();
+
+    this.startPresentation(mediaStream);
+
+    if (isExistsAudioTracks) {
+      this.setMicActive();
+    }
+  }
+}
+```
+
+- Параметр isExistsAudioTracks, можно вычислить в теле функции на основе метода mediaStream.getAudioTracks().
+
+##### Хорошо
+
+- Замените входящий параметр isExistsAudioTracks на вычисление параметра в теле функции.
+
+```ts
+class ScreenShare {
+  startPresentationWithSyncState(mediaStream: MediaStream) {
+    this.stopPresentation();
+
+    this.startPresentation(mediaStream);
+
+    const isExistsAudioTracks = mediaSteam.getAudioTracks().length > 0;
+
+    if (isExistsAudioTracks) {
+      this.setMicActive();
+    }
+  }
+}
+```
+
+</details>
+
+### F2: Выходные аргументы (мутация данных)
+
+<details><summary>Описание</summary>
+
+Читатель кода ожидает, что аргументы используются для передачи входной, а не выходной информации. Если ваша функция должна изменять чье-либо состояние, пусть она изменяет ­состояние объекта, для которого она вызывалась.
+
+#### Пример №1
+
+##### Плохо
+
+У нас есть функция auth, которая внутри себя отправляет запрос на авторизацию в шлюз и в этот же платеж устанавливает rcCode, который вернулся от сервиса.
+
+```ts
+const auth = (payment: TPayment, gateway: TGatewayService) => {
+  const rcCode = gateway.sendAuth(payment);
+
+  payment.rcCode = rcCode;
+};
+```
+
+Такая функция сложна к пониманию тем, что читатель, не знает как устроена функция внутри и не догадывается о том, что внутри в payment устанавливается значение. То есть у нас параметр payment является возвращаемым.
+
+##### Хорошо
+
+Желательно возвращать здесь этот rcCode прямо в возвращаемых параметрах, а не в аргументах.
+
+```ts
+const auth = (payment: TPayment, gateway: TGatewayService) => {
+  const rcCode = gateway.sendAuth(payment);
+
+  return rcCode;
+};
+
+const rcCode = auth(payment, gateway);
+
+payment.setRcCode(rcCode);
+```
+
+#### Пример №2
+
+##### Плохо
+
+```ts
+const addError = (errors: TMutableList<TWarning>) => {
+  errors.add(Warning(WarningType.LEGACY_CODE_DEPENDENCY));
+};
+```
+
+Есть функция addError, в которую передается TMutableList из предупреждений. Дальше этот код добавляет внутри себя в MutableList конкретный warning. Errors является тут возвращаемым аргументом.
+
+##### Хорошо
+
+```ts
+const createLegacyWarning = () => {
+  return new Warning(WarningType.LEGACY_CODE_DEPENDENCY);
+};
+
+const legacyWarning = createLegacyWarning();
+
+errors.add(legacyWarning);
+```
+
+</details>
+
+### F3: Флаги в аргументах
+
+<details><summary>Описание</summary>
+
+Логические аргументы указывают на то, что функция делает сразу две вещи, а это значит, что она нарушает принцип единственности ответственности. Вместо этого у нас должно быть две функции.
+
+#### Пример №1
+
+##### Плохо
+
+```ts
+function processOrder(item, isExpress: boolean) {
+  // Логика обработки заказа с учетом экспресс-доставки
+  if (isExpress) {
+    // Логика для экспресс-доставки
+  } else {
+    // Логика для стандартной доставки
+  }
+}
+```
+
+##### Хорошо
+
+```ts
+function processStandardOrder(item) {
+  // Логика обработки стандартного заказа
+}
+
+function processExpressOrder(item) {
+  // Логика обработки заказа с экспресс-доставкой
+}
+```
+
+#### Пример №2
+
+##### Плохо
+
+Программист хотел создать функцию, обрабатывающую разные платежи, c токеном и без, в результате:
+
+```ts
+const createPayment = (isToken: boolean) => {
+  if (isToken) {
+    const token = getUrl().slice();
+    system.createTransaction(token).setTransaction();
+  } else {
+    const cardNumber = account.getCardNumber();
+    userAccount.createCardPayment(cardNumber).postTransactionToServer();
+  }
+};
+```
+
+##### Хорошо
+
+Здесь может быть использован полиморфизм.
+
+```ts
+class TokenPaymentFlow {
+  createPayment() {
+    // "Create with token"
+  }
+}
+
+class CardPaymentFlow {
+  createPayment() {
+    // "Create with card"
+  }
+}
+```
+
+</details>
+
+## Разное
+
+### G5: Дублирование
+
+<details><summary>Описание</summary>
+
+Принцип DRY или “Don’t Repeat Yourself” (англ. “Не повторяйся”) является ключевым в проектировании программного обеспечения. Этот принцип призывает избегать дублирования кода и создавать абстракции для его сворачивания. Дублирование кода может указывать на возможность для улучшения структуры программы и использования абстракции более высокого уровня. Это поможет ускорить процесс разработки, уменьшить вероятность появления ошибок и позволит другим программистам использовать созданные абстракции.
+
+#### Пример
+
+##### Плохо
+
+У нас есть асинхронные функции updateUserHandle и updateUserInterests, которые предназначены для обновления различных аспектов профиля пользователя на сервере
+
+```ts
+const updateUserHandle = (handle) => {
+  const token = getToken();
+  const headers = getHeaders(token);
+
+  return fetch(`${domain}/v1/users/handle`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({
+      handle,
+    }),
+  });
+};
+
+const updateUserInterests = (interestUUIDs) => {
+  const token = getToken();
+  const headers = getHeaders(token);
+
+  return fetch(`${domain}/v1/users/interests`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({
+      interestUUIDs,
+    }),
+  });
+};
+```
+
+Начало этих двух функций почти идентично: первые несколько строк проверяют, авторизован ли пользователь, и отправляют данные аутентификации в соответствующих запросах. Возможно, это не такая уж большая проблема, если всего два вызова API, но что, если их будет 30? Или, может быть, 1000
+
+##### Хорошо
+
+Мы можем улучшить этот код, написав простую функцию fetchWithAuth(), которая централизует всю логику проверки авторизации клиента в одном месте:
+
+```ts
+const fetchWithAuth = (url, params) => {
+  const token = getToken();
+  const authHeaders = getHeaders(token);
+  const headers = params.headers === undefined ? authHeaders : [...params.headers, ...authHeaders];
+
+  return fetch(url, {...params, headers});
+};
+
+const updateUserHandle = (handle) => {
+  return fetchWithAuth(`${domain}/v1/users/handle`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      handle,
+    }),
+  });
+};
+
+const updateUserInterests = (interestUUIDs) => {
+  return fetchWithAuth(`${domain}/v1/users/interests`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      interestUUIDs,
+    }),
+  });
+};
+```
+
+</details>
+
+### G6: Код на неверном уровне абстракции
+
+<details><summary>Описание</summary>
+
+Правило уровней абстракции гласит, что концепции высокого и низкого уровня должны быть четко разделены в коде, структурированные так, чтобы детали реализации не проникали в абстракции. Качественное проектирование требует, чтобы концепции разделялись на разных уровнях и размещались в разных контейнерах. Это относится к классам, модулям и компонентам, где каждый элемент должен находиться на соответствующем уровне абстракции.
+
+#### Пример
+
+##### Плохо
+
+Рассмотрим следующий фрагмент кода, отображающий интерфейс стека
+
+```ts
+interface Stack<T> {
+  pop(): T | null;
+  push(item: T): void;
+  percentFull(): number;
+}
+
+class UnlimitedStack<T> implements Stack<T> {
+  percentFull(): number {
+    return 0;
+  }
+}
+```
+
+Функция percentFull находится на неверном уровне абстракции. Существует много реализаций стека, в которых концепция заполнения выглядит разумно, однако другие реализации могут не знать, до какой степени заполнен стек.
+
+##### Хорошо
+
+Мы можем создать отдельный интерфейс, который расширяет базовый интерфейс Stack и добавляет функцию percentFull, что подходит для ограниченных стеков:
+
+```ts
+interface Stack<T> {
+  pop(): T | null;
+  push(item: T): void;
+}
+
+class EmptyException extends Error {}
+class FullException extends Error {}
+
+interface BoundedStack<T> extends Stack<T> {
+  percentFull(): number;
+}
+
+class LimitedStack<T> implements BoundedStack<T> {
+  percentFull(): number {
+    // Конкретная реализация для ограниченного стека
+  }
+}
+```
+
+</details>
+
+### G8: Слишком много информации
+
+<details><summary>Описание</summary>
+
+Хорошо определенные модули обладают компактными интерфейсами, позволяющими сделать много минимальными средствами. Для плохо определенных модулей характерны широкие, глубокие интерфейсы, которые заставляют пользователя выполнять много разных операций для решения простых задач. Хорошо определенный интерфейс предоставляет относительно небольшое количество функций, поэтому степень логической привязки при его использовании относительно невелика. Плохо определенный интерфейс предоставляет множество функций, которые необходимо вызывать, поэтому его использование сопряжено с высокой степенью логической привязки.
+
+Хорошие разработчики умеют ограничивать интерфейсы своих классов и модулей. Чем меньше методов содержит класс, тем лучше. Чем меньше переменных известно функции, тем лучше. Чем меньше переменных экземпляров содержит класс, тем лучше.
+
+Скрывайте свои данные. Скрывайте вспомогательные функции. Скрывайте константы и временные переменные. Не создавайте классы с большим количеством методов или переменных экземпляров. Не создавайте большого количества защищенных переменных и функций в субклассах. Сосредоточьтесь на создании очень компактных, концентрированных интерфейсов. Сокращайте логические привязки за счет ограничения информации.
+
+#### Пример
+
+##### Плохо
+
+```ts
+class User {
+  private name: string;
+  private age: number;
+  private address: string;
+  private phoneNumber: string;
+  private email: string;
+  private role: string;
+  private isActive: boolean;
+  private isVerified: boolean;
+  private isPremium: boolean;
+  private lastLogin: Date;
+  private registrationDate: Date;
+  private profilePicture: string;
+  private bio: string;
+  private interests: string[];
+
+  constructor(
+    name: string,при
+    age: number,
+    address: string,
+    phoneNumber: string,
+    email: string,
+    role: string,
+    isActive: boolean,
+    isVerified: boolean,
+    isPremium: boolean,
+    lastLogin: Date,
+    registrationDate: Date,
+    profilePicture: string,
+    bio: string,
+    interests: string[]
+  ) {
+    this.name = name;
+    this.age = age;
+    this.address = address;
+    this.phoneNumber = phoneNumber;
+    this.email = email;
+    this.role = role;
+    this.isActive = isActive;
+    this.isVerified = isVerified;
+    this.isPremium = isPremium;
+    this.lastLogin = lastLogin;
+    this.registrationDate = registrationDate;
+    this.profilePicture = profilePicture;
+    this.bio = bio;
+    this.interests = interests;
+  }
+
+  // ... (other methods)
+}
+```
+
+##### Хорошо
+
+В плохом примере кода было слишком много информации в конструкторе класса User, что делало его слишком громоздким и сложным для использования. В исправленном варианте была удалена лишняя информация из конструктора, чтобы упростить его использование и сделать код более чистым.
+
+```ts
+class User {
+  private name: string;
+  private age: number;
+
+  constructor(name: string, age: number) {
+    this.name = name;
+    this.age = age;
+  }
+
+  getName(): string {
+    return this.name;
+  }
+
+  setName(name: string): void {
+    this.name = name;
+  }
+
+  getAge(): number {
+    return this.age;
+  }
+
+  setAge(age: number): void {
+    this.age = age;
+  }
+}
+```
+
+</details>
+
+### G9: Мертвый код. G12: Балласт
+
+<details><summary>Описание</summary>
+
+#### G9: Мертвый код
+
+Мертвый код – это участки программы, которые никогда не выполняются. Они могут быть результатом невозможных условий, неиспользуемых методов или блоков обработки исключений, которые никогда не активируются. Со временем мертвый код становится проблемой, так как он не обновляется и не соответствует текущим стандартам. Лучшее решение – удалить мертвый код из проекта.
+
+#### G12: Балласт
+
+Неиспользуемые переменные, функции, конструкторы классов, и бессмысленные комментарии являются балластом в коде. Важно регулярно очищать исходные файлы от таких элементов, чтобы поддерживать структуру и чистоту кода.
+
+#### Пример мертвого код
+
+##### Плохо
+
+Рассмотрим произвольный класс
+
+```ts
+class SomeClass {
+
+    private neverUsedMethod() {
+        console.log("This function is called");
+    }
+
+    public someMethod() {
+        if (false) {
+            doSomethingThatNeverHappens();
+        }
+
+        try {
+            this.doSomethingSafe();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private doSomethingSafe() {
+       console.log('Safe operation')
+    }
+}
+```
+
+Метод neverUsedMethod нигде не вызывается. В методе someMethod сразу 2 участка с мертвым кодом: doSomethingThatNeverHappens никогда не будет вызван, так как условие всегда ложно и функция doSomethingSafe, которая не выбрасывает ошибок завернута в try catch, а значит код в блоке catch никогда не будет вызван
+
+##### Хорошо
+
+Весь мертвый код необходимо удалить
+
+```ts
+class SomeClass {
+  public someMethod() {
+    doSomethingSafe();
+  }
+
+  private doSomethingSafe() {
+    console.log('Safe operation');
+  }
+}
+```
+
+#### Пример балласта
+
+##### Плохо
+
+Рассмотрим произвольный класс
+
+```ts
+class SomeClass {
+  private unusedVariable: number;
+
+  constructor() {
+    console.log('Constructor is unnecessary if not initializing anything');
+  }
+
+  public someMethod(): void {
+    console.log('This method performs a useful action');
+  }
+}
+```
+
+В классе SomeClass переменная unusedVariable нигде не используется, а конструктор не выполняет никакой инициализации
+
+##### Хорошо
+
+Балласт необходимо удалить
+
+```ts
+class SomeClass {
+  public someMethod(): void {
+    console.log('This method performs a useful action');
+  }
+}
+```
+
+</details>
+
+### G10: Вертикальное разделение
+
+<details><summary>Описание</summary>
+
+Переменные и функции должны определяться вблизи от места их использования. Локальные переменные должны объявляться непосредственно перед первым использованием и должны обладать небольшой вертикальной областью видимости. Объявление локальной переменной не должно отдаляться от места ее использования на сотню строк.
+
+Приватные функции должны определяться сразу же после первого использования. Приватные функции принадлежат области видимости всего класса, но вертикальное расстояние между вызовами и определениями все равно должно быть минимальным. Приватная функция должна обнаруживаться простым просмотром кода от места первого использования.
+
+#### Пример №1
+
+##### Плохо
+
+В плохом примере кода все переменные класса Car были объявлены в одной вертикальной группе, что делает код менее читаемым и ухудшает визуальную структуру класса.
+
+```ts
+class Car {
+  private make: string;
+  private model: string;
+  private year: number;
+  private isOnTrade: boolean;
+  private inAction: boolean;
+  private owner: string;
+}
+```
+
+##### Хорошо
+
+В исправленном варианте переменные были разделены на две группы, что делает код более читаемым и улучшает его визуальную структуру.
+Переменные разделены на тесно связанные между собой. Которые можно отнести к разным сущностям.
+
+```ts
+class Car {
+  private make: string;
+  private model: string;
+  private year: number;
+
+  private isOnTrade: boolean;
+  private inAction: boolean;
+  private owner: string;
+}
+```
+
+#### Пример №2
+
+##### Плохо
+
+В плохом примере кода методы класса Calculator были написаны в одной вертикальной линии, что делает код менее читаемым и ухудшает визуальную структуру класса.
+
+```ts
+class Calculator {
+  public add(a: number, b: number): number {
+    return a + b;
+  }
+  public subtract(a: number, b: number): number {
+    return a - b;
+  }
+  public multiply(a: number, b: number): number {
+    return a * b;
+  }
+  public divide(a: number, b: number): number {
+    return a / b;
+  }
+}
+```
+
+##### Хорошо
+
+В исправленном варианте каждый метод находится на отдельной строке, что делает код более читаемым и улучшает его визуальную структуру.
+
+```ts
+class Calculator {
+  public add(a: number, b: number): number {
+    return a + b;
+  }
+
+  public subtract(a: number, b: number): number {
+    return a - b;
+  }
+
+  public multiply(a: number, b: number): number {
+    return a * b;
+  }
+
+  public divide(a: number, b: number): number {
+    return a / b;
+  }
+}
+```
+
+</details>
+
+### G11: Непоследовательность
+
+<details><summary>Описание</summary>
+
+Если некая операция выполняется определенным образом, то и все похожие операции должны выполняться так же. Это правило возвращает нас к «принципу наименьшего удивления». Ответственно подходите к выбору новых схем и обозначений. Последовательное соблюдение подобных правил существенно упрощает чтение и модификацию кода.
+
+#### Пример №1
+
+##### Плохо
+
+```ts
+processVerificationRequest();
+makeUpdateRequest();
+processDeletion();
+```
+
+##### Хорошо
+
+```ts
+processVerificationRequest();
+processUpdateRequest();
+processDeleteRequest();
+```
+
+#### Пример №2
+
+##### Плохо
+
+```ts
+class AudioProcessor {
+  private tracks: MediaStreamAudioTrack = [];
+
+  private getTrackByIndex(index: string) {
+    return this.tracks[index];
+  }
+
+  public muteTrackByIndex(index: string) {
+    const audioTrack = this.getTrackByIndex(id);
+
+    if (audioTrack) {
+      audioTrack.enabled = false;
+    }
+  }
+
+  public unmuteTrackByIndex(index: string) {
+    const audioTrack = this.tracks[index];
+
+    if (audioTrack) {
+      audioTrack.enabled = true;
+    }
+  }
+}
+```
+
+##### Хорошо
+
+Метод getTrackByIndex инкапсулирует логику получения элемента списка tracks, поэтому стоит придерживаться данного подхода для получения аудио-трека во всем классе.
+
+```ts
+class AudioProcessor {
+  private tracks: MediaStreamAudioTrack = [];
+
+  private getTrackByIndex(index: string) {
+    return this.tracks[index];
+  }
+
+  public muteTrackByIndex(index: string) {
+    const audioTrack = this.getTrackByIndex(id);
+
+    if (audioTrack) {
+      audioTrack.enabled = false;
+    }
+  }
+
+  public unmuteTrackByIndex(index: string) {
+    const audioTrack = this.getTrackByIndex(id);
+
+    if (audioTrack) {
+      audioTrack.enabled = true;
+    }
+  }
+}
+```
+
+#### Пример №3
+
+##### Плохо
+
+Методы класса ServerApi выполняют похожие действия (отправляют запросы на сервер), но имеют непоследовательность в названиях.
+
+```ts
+class ServerApi {
+  public processAddAccountRequest(url: string, account: TAccount) {
+    return this.fetch('POST', url, verification);
+  }
+
+  public sendDeleteAccountRequest(url: string, accountId: string) {
+    return this.fetch('DELETE', url, accountId);
+  }
+
+  public requestAuth(url: string, credentials: TCredentials) {
+    return this.fetch('GET', url, credentials);
+  }
+}
+```
+
+##### Хорошо
+
+Методы, выполняющие схожие операции, должны называться схожим образом.
+
+```ts
+class ServerApi {
+  public requestAddAccount(url: string, account: TAccount) {
+    return this.fetch('POST', url, verification);
+  }
+
+  public requestDeleteAccount(url: string, accountId: string) {
+    return this.fetch('DELETE', url, accountId);
+  }
+
+  public requestAuth(url: string, credentials: TCredentials) {
+    return this.fetch('GET', url, credentials);
+  }
+}
+```
+
+#### Пример №4
+
+##### Плохо
+
+Функции hasNotFoundStatus и hasForbiddenStatus используют перечисление HttpStatusCode для определения статуса ответа сервера. В то время как функция hasServiceUnavailableStatus сравнивает статус ответа с числом.
+
+```ts
+const hasNotFoundStatus = (response: Response) => {
+  return response.status === HttpStatusCode.NOT_FOUND_404;
+};
+
+const hasForbiddenStatus = (response: Response) => {
+  return response.status === HttpStatusCode.FORBIDDEN_403;
+};
+
+const hasServiceUnavailableStatus = (response: Response) => {
+  return response.status === 503;
+};
+```
+
+##### Хорошо
+
+Выбранное перечисление необходимо использовать во всех функциях.
+
+```ts
+const hasNotFoundStatus = (response: Response) => {
+  return response.status === HttpStatusCode.NOT_FOUND_404;
+};
+
+const hasForbiddenStatus = (response: Response) => {
+  return response.status === HttpStatusCode.FORBIDDEN_403;
+};
+
+const hasServiceUnavailableStatus = (response: Response) => {
+  return response.status === HttpStatusCode.SERVICE_UNAVAILABLE_503;
+};
+```
+
+</details>
+
+### G13: Искусственные привязки
+
+<details><summary>Описание</summary>
+
+То, что не зависит друг от друга, не должно объединяться искусственными привязками. Например, обобщенные перечисления не должны содержаться в более конкретных классах, потому что в этом случае информация о конкретном классе должна быть доступна в любой точке приложения, в которой используется перечисление. То же относится и к статическим функциям общего назначения, объявляемым в конкретных классах.
+
+В общем случае искусственной считается привязка между двумя модулями, не имеющая явной, непосредственной цели. Искусственная привязка возникает в результате размещения переменной, константы или функции во временно удобном, но неподходящем месте. Главные причины для появления искусственных привязок — лень и небрежность.
+
+Не жалейте времени — разберитесь, где должно располагаться объявление той или иной функции, константы или переменной. Слишком часто мы размещаем их в удобном месте «под рукой», а потом оставляем там навсегда.
+
+#### Пример №1
+
+##### Плохо
+
+В плохом примере кода, перечисление цветов COLORS и статическая функция isColorAvailable объявлены прямо в классе Car, что создает искусственную привязку между классом Car и доступными цветами.
+
+```ts
+class Car {
+  public static readonly COLORS = ['red', 'blue', 'green'];
+
+  public static isColorAvailable(color: string): boolean {
+    return this.COLORS.includes(color);
+  }
+}
+```
+
+##### Хорошо
+
+В исправленном варианте перечисление и функция вынесены в отдельный утилитарный класс ColorUtil, что позволяет избежать искусственной привязки и делает код более модульным и чистым.
+
+```ts
+class Car {
+  // implementation
+}
+
+class ColorUtil {
+  public static readonly COLORS = ['red', 'blue', 'green'];
+
+  public static isColorAvailable(color: string): boolean {
+    return this.COLORS.includes(color);
+  }
+}
+```
+
+#### Пример №2
+
+##### Плохо
+
+Компоненты NavNewPreset и NavAddPreset объеденины в общий - AddPresetRoute. Не смотря на то, что оба компонента располагаются друг за другом, им не обязательно находиться рядом для использования. Они отвечают за разную логику. Поэтому объединение их в общий компонент является искусственной привязкой.
+
+```ts
+const AddPresetRoute = ({ isAddingPreset, isAddPresetActionAllowed, onSelectAddPreset }) => {
+  return (
+    <>
+      {isAddingPreset && <NavNewPreset />}
+
+      {isAddPresetActionAllowed && <NavAddPreset onSelectAddPreset={onSelectAddPreset} />}
+    </>
+  );
+};
+
+const PresetsNavigation = ({ isAddingPreset, isAddPresetActionAllowed, currentPresetId, presets, onAdd, onEdit }) => {
+  return (
+    <div>
+      <PresetsList currentPresetId={currentPresetId} presets={presets} onChange={onEdit} />
+
+      <AddPresetRoute
+        isAddingPreset={isAddingPreset}
+        isAddPresetActionAllowed={isAddPresetActionAllowed}
+        onSelectAddPreset={onAdd}
+      />
+    </div>
+  );
+};
+```
+
+##### Хорошо
+
+В исправленном варианте контейнеры `NavNewPreset` и `NavAddPreset` вынесены на уровень выше, а искусственная сущность `AddPresetRoute` удалена.
+
+```ts
+const PresetsNavigation = ({ isAddingPreset, isAddPresetActionAllowed, currentPresetId, presets, onAdd, onEdit }) => {
+  return (
+    <div>
+      <PresetsList currentPresetId={currentPresetId} presets={presetsOrderedByHotKey} onChange={onEdit} />
+
+      {isAddingPreset && <NavNewPreset />}
+
+      {isAddPresetActionAllowed && <NavAddPreset onSelectAddPreset={onSelectAddPreset} />}
+    </div>
+  );
+};
+```
+
+</details>
+
+### G14: Функциональная зависть
+
+<details><summary>Описание</summary>
+
+Для методов класса должны быть важны переменные и функции того класса, которому они принадлежат, а не переменные и функции других классов. Когда метод использует методы доступа другого объекта для манипуляций с его данными, то он завидует области видимости класса этого объекта. Он словно мечтает находиться в другом классе, чтобы иметь прямой доступ к переменным, с которыми он работает.
+
+#### Пример
+
+##### Плохо
+
+В плохом примере класс Order использует метод доступа к данным (calculateTotalPrice) другого объекта customer для получения общей цены заказа. Это нарушает принцип "Функциональная зависть", так как метод класса Order завидует области видимости класса Customer и пытается работать с данными другого объекта.
+
+```ts
+class Order {
+  private customer: Customer;
+
+  constructor() {
+    this.customer = new Customer();
+  }
+
+  getTotalPrice(): number {
+    return this.customer.calculateTotalPrice();
+  }
+}
+
+class Customer {
+  private items: Item[];
+
+  calculateTotalPrice(): number {
+    // вычисление общей цены на основе items
+  }
+}
+```
+
+##### Хорошо
+
+В исправленном варианте метод getTotalPrice класса Order использует прямой доступ к методу calculateTotalPrice вместо обращения к методу calculateTotalPrice объекта customer.
+
+```ts
+class Order {
+  private customer: Customer;
+
+  getTotalPrice(): number {
+    return this.calculateTotalPrice();
+  }
+
+  private calculateTotalPrice(): number {
+    // вычисление общей цены на основе customer
+  }
+}
+
+class Customer {
+  private items: Item[];
+
+  // методы доступа к items
+}
+```
+
+</details>
+
+### G15: Аргументы-селекторы
+
+<details><summary>Описание</summary>
+
+Избегайте использования аргументов-селекторов в функциях, так как это означает, что она имеет несколько ответственностей, что усложняет ее понимание и может привести к неожиданным побочным эффектам. Рекомендуется разделить большую функцию на несколько более мелких, чтобы улучшить читаемость кода и избежать неожиданных побочных эффектов.
+
+#### Пример
+
+##### Плохо
+
+В плохом примере кода, функция вызывается с аргументом true при оплате сверхурочной работы по полуторному тарифу или с аргументом false при оплате по стандартному тарифу. Каждый раз, при вызове calculateWeeklyPay(false), приходится вспоминать, что он означает
+
+```ts
+function calculateWeeklyPay(overtime: boolean): number {
+  const tenthRate: number = getTenthRate();
+  const tenthsWorked: number = getTenthsWorked();
+  const straightTime: number = Math.min(400, tenthsWorked);
+  const overTime: number = Math.max(0, tenthsWorked - straightTime);
+  const straightPay: number = straightTime * tenthRate;
+  const overtimeRate: number = overtime ? 1.5 : 1.0 * tenthRate;
+  const overtimePay: number = Math.round(overTime * overtimeRate);
+  return straightPay + overtimePay;
+}
+```
+
+##### Хорошо
+
+В исправленном варианте функционал расчета оплаты разделен на несколько функций, что делает код более читаемым, понятным и легким для поддержки. Каждая функция отвечает за определенный аспект расчета заработной платы, что повышает модульность и упрощает восприятие кода
+
+```ts
+function straightPay(): number {
+  return getTenthsWorked() * getTenthRate();
+}
+
+function overTimePay(): number {
+  const overTimeTenths: number = Math.max(0, getTenthsWorked() - 400);
+  const overTimePay: number = overTimeBonus(overTimeTenths);
+  return straightPay() + overTimePay;
+}
+
+function overTimeBonus(overTimeTenths: number): number {
+  const bonus: number = 0.5 * getTenthRate() * overTimeTenths;
+  return Math.round(bonus);
+}
+```
+
+</details>
+
+### G19: Используйте пояснительные переменные
+
+<details><summary>Описание</summary>
+
+Использование пояснительных переменных может улучшить читаемость кода, делая его более понятным. В именах переменных должно отражаться то, что в них хранится, а не то для чего они созданы.
+
+#### Пример №1
+
+##### Плохо
+
+В этом примере условие для одобрения займа включает в себя несколько проверок и может быть сложным для понимания:
+
+```ts
+if (
+  user.age >= 18 &&
+  user.age <= 65 &&
+  user.employmentStatus === 'employed' &&
+  user.criminalRecord === false
+) {
+  approveLoan();
+}
+```
+
+##### Хорошо
+
+В исправленном варианте используются пояснительные переменные (isOfLegalAge, isEmployed, isNoCriminalRecord), чтобы сделать условие более понятным. Каждая переменная описывает конкретное условие, что упрощает понимание происходящего:
+
+```ts
+const isOfLegalAge = user.age >= 18 && user.age <= 65;
+const isEmployed = user.employmentStatus === 'employed';
+const isNoCriminalRecord = user.criminalRecord === false;
+
+if (isOfLegalAge && isEmployed && isNoCriminalRecord) {
+  approveLoan();
+}
+```
+
+#### Пример №2
+
+##### Плохо
+
+```ts
+const match = rawHeaderLine.match(headerPattern);
+
+headers.set(match[1].toLowerCase(), match[2]);
+```
+
+##### Хорошо
+
+```ts
+const match = rawHeaderLine.match(headerPattern);
+const key = match[1];
+const value = match[2];
+
+headers.set(key.toLowerCase(), value);
+```
+
+#### Пример №3
+
+##### Плохо
+
+Название переменных отражает то, для чего они были созданы, а не их содержание.
+
+```ts
+const isHiddenAgeError = age >= 18 && age <= 65;
+const isHiddenDisplayNameError = displayName !== '';
+const isAvailableToRegister = isHiddenAgeError && isHiddenDisplayNameError;
+```
+
+##### Хорошо
+
+Название каждой переменной отражает содержащиеся в ней данные.
+
+```ts
+const isValidAge = age >= 18 && age <= 65;
+const isFilledDisplayName = displayName !== '';
+const isValidUserData = isValidAge && isFilledDisplayName;
+```
+
+</details>
+
+### G20: Имена функций должны описывать выполняемую операцию
+
+<details><summary>Описание</summary>
+
+Именование функций является важной частью написания читаемого и поддерживаемого кода. Имя функции должно быть достаточно информативным, чтобы описать то, что функция делает
+
+#### Пример №1
+
+##### Плохо
+
+В этом примере, имя функции calculate проводит какую-то математическую операцию над number, не давая представления о том, что конкретно делает функция:
+
+```ts
+const calculate = (number: number) => {
+  return number * number;
+};
+```
+
+##### Хорошо
+
+В исправленном примере, имя функции calculateSquare ясно указывают, что функция вычисляет квадрат передаваемого числа:
+
+```ts
+const calculateSquare = (number: number) => {
+  return number * number;
+};
+```
+
+#### Пример №2
+
+##### Плохо
+
+```ts
+const newDate = date.add(5);
+```
+
+##### Хорошо
+
+```ts
+date.addDaysTo(5);
+```
+
+```ts
+const newDate = date.daysLater(5);
+```
+
+</details>
+
+### G22: Преобразование логических зависимостей в физические
+
+<details><summary>Описание</summary>
+
+Если один модуль зависит от другого, зависимость должна быть не только логической, но и физической. Зависимый модуль не должен делать никаких предположений (иначе говоря, создавать логические зависимости) относительно того модуля, от которого он зависит. Вместо этого он должен явно запросить у этого модуля всю необходимую информацию.
+
+#### Пример №1
+
+##### Плохо
+
+```ts
+class LowLevelModule {
+  doSomething() {
+    // реализация
+  }
+}
+
+class HighLevelModule {
+  private lowLevelModule: LowLevelModule;
+
+  constructor() {
+    this.lowLevelModule = new LowLevelModule(); // создание экземпляра
+  }
+
+  doSomethingElse() {
+    this.lowLevelModule.doSomething(); // использование непосредственной зависимости
+  }
+}
+```
+
+##### Хорошо
+
+Можно избежать запаха, преобразовывая логические зависимости в физические, путем использования принципа инверсии зависимостей (Dependency Inversion Principle, DIP). Этот принцип гласит, что высокоуровневые модули не должны зависеть от низкоуровневых модулей, оба типа должны зависеть от абстракций.
+
+В этом примере HighLevelModule явно запрашивает экземпляр Module через его конструктор, что преобразует логическую зависимость в физическую.
+
+```ts
+interface Module {
+  doSomething(): void;
+}
+
+class LowLevelModule implements Module {
+  doSomething() {
+    // реализация
+  }
+}
+
+class HighLevelModule {
+  private module: Module;
+
+  constructor(module: Module) {
+    this.module = module; // инъекция зависимости через конструктор
+  }
+
+  doSomethingElse() {
+    this.module.doSomething(); // использование физической зависимости
+  }
+}
+
+// где-то в другом месте приложения:
+const lowLevelModule = new LowLevelModule();
+const highLevelModule = new HighLevelModule(lowLevelModule); // инъекция зависимости
+```
+
+#### Пример №2
+
+##### Плохо
+
+```ts
+class FilmController {
+  openDetails() {
+    const popup = new Popup();
+    this.popupOpened = true;
+  }
+
+  isPopupOpened() {
+    return this.popupOpened;
+  }
+}
+```
+
+##### Хорошо
+
+```ts
+class FilmController {
+  openDetails() {
+    this.popup = new Popup();
+  }
+
+  isPopupOpened() {
+    return this.popup.isOpened();
+  }
+}
+```
+
+</details>
+
+### G23: Используйте полиморфизм вместо if/Else или switch/Case
+
+<details><summary>Описание</summary>
+
+Во-первых, команды switch чаще всего используются только потому, что они представляют очевидное решение методом «грубой силы», а не самое уместное решение для конкретной ситуации. Таким образом, это эвристическое правило напоминает нам о том, что до применения switch следует рассмотреть возможность применения полиморфизма.
+
+Во-вторых, ситуации, в которых состав функций менее стабилен, чем состав типов, встречаются относительно редко. Следовательно, к каждой конструкции switch следует относиться с подозрением.
+
+Я использую правило «ОДНОЙ КОМАНДЫ SWITCH»: для каждого типа выбора программа не должна содержать более одной команды switch. Множественные конструкции switch следует заменять полиморфными объектами.
+
+#### Пример
+
+##### Плохо
+
+```ts
+enum ShapeType {
+  Circle,
+  Square,
+}
+
+function calculateArea(shape: ShapeType, radiusOrSide: number): number {
+  let area = 0;
+
+  switch (shape) {
+    case ShapeType.Circle:
+      area = Math.PI * Math.pow(radiusOrSide, 2);
+      break;
+    case ShapeType.Square:
+      area = Math.pow(radiusOrSide, 2);
+      break;
+  }
+
+  return area;
+}
+
+console.log(calculateArea(ShapeType.Circle, 5)); // Output: 78.54
+```
+
+##### Хорошо
+
+Исправления запаха с использованием полиморфизма.
+
+```ts
+abstract class Shape {
+  abstract calculateArea(): number;
+}
+
+class Circle extends Shape {
+  constructor(private radius: number) {
+    super();
+  }
+
+  calculateArea(): number {
+    return Math.PI * Math.pow(this.radius, 2);
+  }
+}
+
+class Square extends Shape {
+  constructor(private side: number) {
+    super();
+  }
+
+  calculateArea(): number {
+    return Math.pow(this.side, 2);
+  }
+}
+
+function calculateArea(shape: Shape): number {
+  return shape.calculateArea();
+}
+
+const circle = new Circle(5);
+console.log(calculateArea(circle)); // Output: 78.54
+```
+
+</details>
+
+### G25: Заменяйте «волшебные числа» именованными константами
+
+<details><summary>Описание</summary>
+
+Числа следует скрыть в константах с содержательными именами.
+
+#### Пример
+
+##### Плохо
+
+```ts
+function calculateArea(radius: number): number {
+  return 3.14 * radius * radius; // "волшебное число" 3.14
+}
+```
+
+##### Хорошо
+
+Исправления запаха с использованием полиморфизма.
+
+```ts
+const PI = 3.14; // именованная константа
+
+function calculateArea(radius: number): number {
+  return PI * radius * radius;
+}
+```
+
+</details>
+
+### G28: Инкапсулируйте условные конструкции
+
+<details><summary>Описание</summary>
+
+В булевской логике достаточно трудно разобраться и вне контекста команд if или while. Выделите в программе функции, объясняющие намерения условной конструкции.
+
+#### Пример
+
+##### Плохо
+
+```ts
+if (timer.hasExpired() && !timer.isRecurrent()) {
+}
+```
+
+##### Хорошо
+
+```ts
+const shouldBeDeleted = (timer) => {
+  return timer.hasExpired() && !timer.isRecurrent();
+};
+
+if (shouldBeDeleted(timer)) {
+}
+```
+
+</details>
+
+### G29: Избегайте отрицательных условий
+
+<details><summary>Описание</summary>
+
+Отрицательные условия немного сложнее для понимания, чем положительные. Таким образом, по возможности старайтесь формулировать положительные условия.
+
+#### Пример №1
+
+##### Плохо
+
+```ts
+if (!buffer.shouldNotCompact()) {
+}
+```
+
+##### Хорошо
+
+```ts
+if (buffer.shouldCompact()) {
+}
+```
+
+#### Пример №2
+
+##### Плохо
+
+```ts
+if (!isEmpty(list)) {
+  // код, если список не пуст
+}
+```
+
+##### Хорошо
+
+```ts
+if (list.length > 0) {
+  // код, если список не пуст
+}
+```
+
+</details>
+
+### G30: Функции должны выполнять одну операцию
+
+<details><summary>Описание</summary>
+
+Часто возникает искушение разделить свою функцию на несколько секций для выполнения разных операций. Такие функции выполняют несколько операций; их следует преобразовать в группу меньших функций, каждая из которых выполняет только одну операцию.
+
+#### Пример №1
+
+##### Плохо
+
+Эта функция выполняет сразу три операции: она перебирает всех работников; проверяет, начислены ли работнику какие-то выплаты; и наконец, производит оплату.
+
+```ts
+const pay = () => {
+  for (let e of employees) {
+    if (e.isPayday()) {
+      const pay = e.calculatePay();
+
+      e.deliverPay(pay);
+    }
+  }
+};
+```
+
+##### Хорошо
+
+Каждая из этих функций выполняет только одну операцию.
+
+```ts
+const pay = () => {
+  for (let e of employees) {
+    payIfNecessary(e);
+  }
+};
+
+const payIfNecessary = (e: Employee) => {
+  if (e.isPayday()) {
+    calculateAndDeliverPay(e);
+  }
+};
+
+const calculateAndDeliverPay = (e: Employee) => {
+  const pay = e.calculatePay();
+
+  e.deliverPay(pay);
+};
+```
+
+#### Пример №2
+
+##### Плохо
+
+```ts
+function processUserDataAndSendEmail(user: User) {
+  // Обработка данных пользователя
+  user.processData();
+
+  // Отправка электронной почты
+  emailService.sendEmail(user.email, 'Данные обработаны успешно');
+}
+```
+
+##### Хорошо
+
+```ts
+function processUserData(user: User) {
+  user.processData();
+}
+
+function sendEmailNotification(email: string, message: string) {
+  emailService.sendEmail(email, message);
+}
+```
+
+</details>
+
+### G31: Скрытые временные привязки
+
+<details><summary>Описание</summary>
+
+Временные привязки часто необходимы, но они не должны скрываться. Структура аргументов функций должна быть такой, чтобы последовательность вызова была абсолютно очевидной.
+
+#### Пример
+
+##### Плохо
+
+```ts
+class MoogDiver {
+  gradient: Gradient;
+  splines: List<Spline>;
+
+  public dive(reason: string) {
+    saturateGradient();
+
+    reticulateSplines();
+
+    diveForMoog(reason);
+  }
+}
+```
+
+Порядок вызова трех функций важен. Сначала вызывается saturateGradient(), затем reticulateSplines() и только после этого diveForMoog(). К сожалению, код не обеспечивает принудительного соблюдения временной привязки. Ничто не мешает другому программисту вызвать reticulateSplines до saturateGradient, и все кончится исключением UnsaturatedGradientException.
+
+##### Хорошо
+
+```ts
+class MoogDiver {
+  public dive(reason: string) {
+    const gradient = saturateGradient();
+
+    const splines = reticulateSplines(gradient);
+
+    diveForMoog(splines, reason);
+  }
+}
+```
+
+Временная привязка реализуется посредством создания «эстафеты». Каждая функция выдает результат, необходимый для работы следующей функции, и вызвать эти функции с нарушением порядка сколько-нибудь разумным способом уже не удастся.
+
+Пожалуй, кто-то сочтет, что это увеличивает сложность функций, и это действительно так. Однако дополнительные синтаксические сложности лишь выявляют реальную сложность ситуации, обусловленную необходимостью согласования по времени.
+
+Обратите внимание: переменные экземпляров остались на своих местах. Предполагается, что они используются приватными методами класса. Использование их в аргументах лишь явно выражает факт существования временной привязки.
+
+</details>
+
+### G34: Функции должны быть написаны на одном уровне абстракции
+
+<details><summary>Описание</summary>
+
+Все команды функции должны быть сформулированы на одном уровне абстракции, который расположен одним уровнем ниже операции, описываемой именем функции. Возможно, это эвристическое правило сложнее всего правильно интерпретировать и соблюдать. Идея достаточно тривиальна, но люди слишком хорошо справляются со смешением разных уровней абстракции.
+
+#### Пример №1
+
+##### Плохо
+
+```ts
+const render = (size: number) => {
+  const html = new StringBuffer('<hr');
+
+  if (size > 0) {
+    html
+      .append(' size="')
+      .append(size + 1)
+      .append('"');
+  }
+
+  html.append('>');
+
+  return html.toString();
+};
+```
+
+Функция конструирует тег HTML, который рисует на странице горизонтальную линию. Толщина линии задается переменной size.
+
+А теперь взгляните еще раз. В этом методе смешиваются минимум два уровня абстракции. Первый уровень — наличие толщины у горизонтальной линии. Второй уровень — синтаксис тега HR. Код позаимствован из модуля HruleWidget проекта FitNesse. Модуль распознает строку из четырех и более дефисов и преобразует ее в соответствующий тег HR. Чем больше дефисов, тем больше толщина.
+
+##### Хорошо
+
+Обратите внимание: имя поля size изменено в соответствии с его истинным назначением (в нем хранится количество дополнительных дефисов).
+
+```ts
+const render = (extraDashes: number) => {
+  const hr = new HtmlTag('hr');
+
+  if (extraDashes > 0) {
+    hr.addAttribute('size', hrSize(extraDashes));
+  }
+
+  return hr.html();
+};
+
+const hrSize = (height: number) => {
+  const hrSize = height + 1;
+
+  return String.format('%d', hrSize);
+};
+```
+
+Изменение разделяет два уровня абстракции. Функция render просто конструирует тег HR, ничего не зная о синтаксисе HTML этого тега. Модуль HtmlTag берет на себя все хлопоты с синтаксисом.
+
+#### Пример №2
+
+##### Плохо
+
+```ts
+function processUserData(user) {
+  // Получаем данные пользователя
+  const userData = getUserData(user);
+
+  // Проверяем данные пользователя
+  if (userData.age >= 18) {
+    // Обрабатываем данные
+    processUser(user);
+  } else {
+    // Выводим ошибку
+    console.error('User is under 18');
+  }
+}
+```
+
+##### Хорошо
+
+```ts
+function processUserData(user) {
+  if (isUserAdult(user)) {
+    handleAdultUser(user);
+  } else {
+    handleUnderageUserError();
+  }
+}
+
+function isUserAdult(user) {
+  return user.age >= 18;
+}
+
+function handleAdultUser(user) {
+  processUser(user);
+}
+
+function handleUnderageUserError() {
+  console.error('User is under 18');
+}
+```
+
+Помните, что хорошая структура функций и поддержание одного уровня абстракции помогает улучшить читаемость и поддерживаемость кода.
+
+</details>
+
+### G35: Храните конфигурационные данные на высоких уровнях
+
+<details><summary>Описание</summary>
+
+Если в программе имеется константа, определяющая значение по умолчанию или параметр конфигурации, и эта константа известна на высоких уровнях абстракции, — не прячьте ее в низкоуровневой функции. Передайте ее в аргументе низкоуровневой функции, вызываемой из функции высокого уровня.
+
+#### Пример
+
+##### Плохо
+
+```ts
+const DEFAULT_TIMEOUT = 5000;
+
+function fetchData(url) {
+  // Используем значение по умолчанию для таймаута
+  fetch(url, { timeout: DEFAULT_TIMEOUT })
+    .then((response) => console.log(response))
+    .catch((error) => console.error(error));
+}
+```
+
+##### Хорошо
+
+```ts
+const DEFAULT_TIMEOUT = 5000;
+
+function fetchData(url, timeout = DEFAULT_TIMEOUT) {
+  fetch(url, { timeout })
+    .then((response) => console.log(response))
+    .catch((error) => console.error(error));
+}
+```
+
+Обратите внимание, что передача конфигурационных данных на высоких уровнях помогает сделать код более гибким и улучшить его тестируемость.
+
+</details>
+
+### G36: Избегайте транзитивных обращений
+
+<details><summary>Описание</summary>
+
+В общем случае модуль не должен обладать слишком полной информацией о тех компонентах, с которыми он взаимодействует. Точнее, если A взаимодействует с B, а B взаимодействует с C, то модули, использующие A, не должны знать о C (то есть нежелательны конструкции вида a.getB().getC().doSomething()). Иногда это называется «законом Деметры».
+
+В любом случае все сводится к тому, что модули должны обладать информацией только о тех модулях, с которыми они непосредственно взаимодействуют, а не располагать навигационной картой всей системы.
+
+Если в нескольких модулях используется та или иная форма команды a.getB().getC(), то в дальнейшем вам будет трудно изменить архитектуру системы, вставив между B и C промежуточный компонент Q. Придется найти каждое вхождение a.getB().getC() и преобразовать его в a.getB().getQ().getC(). Так образуются жесткие, закостеневшие архитектуры. Слишком многие модули располагают слишком подробной информацией о системе.
+
+Весь необходимый сервис должен предоставляться компонентами, с которыми напрямую взаимодействует модуль. Не заставляйте пользователя странствовать по графу объектов системы в поисках нужного метода. Проблема должна решаться простыми вызовами вида
+
+```ts
+myCollaborator.doSomething();
+```
+
+#### Пример
+
+##### Плохо
+
+```ts
+class A {
+  // ...
+  getB() {
+    return new B();
+  }
+}
+
+class B {
+  // ...
+  getC() {
+    return new C();
+  }
+}
+
+class C {
+  // ...
+  doSomething() {
+    // Логика
+  }
+}
+
+// Использование транзитивного обращения
+const a = new A();
+a.getB().getC().doSomething();
+```
+
+##### Хорошо
+
+```ts
+class A {
+  // ...
+  doSomethingWithC() {
+    const b = new B();
+    const c = b.getC();
+    c.doSomething();
+  }
+}
+```
+
+</details>
+
+### Стрельба дробью
+
+<details><summary>Описание</summary>
+
+“Стрельба дробью” подобна расходящимся изменениям, но представляет собой их противоположность. Унюхать ее можно, когда при выполнении любых изменений приходится вносить множество мелких модификаций в большое число
+различных модулей. Когда изменения разбросаны повсюду, их трудно искать и
+можно пропустить важное изменение.
+В этой ситуации следует свести все изменения в один модуль.
+
+#### Пример
+
+##### Плохо
+
+```ts
+// Модуль 1
+function calculateTotalPrice(items) {
+  let totalPrice = 0;
+  items.forEach((item) => {
+    totalPrice += item.price;
+  });
+  return totalPrice;
+}
+
+// Модуль 2
+function applyDiscount(totalPrice, discountPercentage) {
+  return totalPrice * (1 - discountPercentage / 100);
+}
+```
+
+##### Хорошо
+
+```ts
+// Объединяем логику расчета и применения скидки в один класс
+class ShoppingCart {
+  items: Item[];
+
+  constructor(items: Item[]) {
+    this.items = items;
+  }
+
+  calculateTotalPrice() {
+    let totalPrice = 0;
+    this.items.forEach((item) => {
+      totalPrice += item.price;
+    });
+    return totalPrice;
+  }
+
+  applyDiscount(discountPercentage) {
+    let totalPrice = this.calculateTotalPrice();
+    return totalPrice * (1 - discountPercentage / 100);
+  }
+}
+```
+
+Путем объединения логики расчета общей стоимости и применения скидки в один класс ShoppingCart, мы уменьшаем "Стрельбу дробью" и упрощаем обслуживание и изменение кода.
+
+</details>
+
+### Одержимость примитивами
+
+<details><summary>Описание</summary>
+
+Большинство сред программирования основаны на широком применении набора примитивных типов: целых чисел, чисел с плавающей точкой и строк. Библиотеки могут добавить такие дополнительные небольшие объекты, как даты.
+Встречается немало программистов, которые не хотят создавать свои собственные фундаментальные типы, полезные для их предметной области, — например
+денежные единицы, координаты или диапазоны. И потому приходится встречаться с расчетами, которые рассматривают денежные суммы как простые числа;
+с вычислениями физических величин, которые игнорируют единицы измерений
+и добавляют дюймы к миллиметрам; или с большим количеством кода наподобие
+`if(a<upper && a>lower)....`
+Строки являются особенно яркими источниками запаха этого вида: номер телефона — это нечто большее, чем просто набор символов. Если даже такой тип
+не делает ничего иного — он по крайней мере включает согласованную логику
+отображения в пользовательском интерфейсе. Представление таких типов в виде
+строк является настолько распространенным запахом, что некоторые называют
+их “строково типизированными” переменными.
+
+#### Пример
+
+##### Плохо
+
+```ts
+function calculateTotalPrice(quantity, price) {
+  return quantity * price;
+}
+
+function formatPhoneNumber(number) {
+  return `(${number.slice(0, 3)}) ${number.slice(3, 6)}-${number.slice(6)}`;
+}
+```
+
+##### Хорошо
+
+```ts
+class Product {
+  quantity: number;
+  price: number;
+
+  constructor(quantity: number, price: number) {
+    this.quantity = quantity;
+    this.price = price;
+  }
+
+  getTotalPrice() {
+    return this.quantity * this.price;
+  }
+}
+
+class PhoneNumber {
+  number: string;
+
+  constructor(number: string) {
+    this.number = number;
+  }
+
+  formatNumber() {
+    return `(${this.number.slice(0, 3)}) ${this.number.slice(3, 6)}-${this.number.slice(6)}`;
+  }
+}
+```
+
+Путем замены примитивов объектами Product и PhoneNumber мы улучшаем читаемость и поддерживаемость кода, а также позволяем добавить согласованную логику и методы для работы с этими данными.
+
+</details>
+
+### Ленивый элемент + Посредник
+
+<details><summary>Описание</summary>
+
+#### Ленивый элемент
+
+Это может быть функция с именем, совпадающим с тем, что делает ее тело, или класс, который по сути является одной простой функцией. Иногда это функция, которая должна была вырасти и стать важной и востребованной позже, но которая так и не осуществила свои мечты. Иногда это класс, который раньше был нужен, но оказался уменьшен с помощью рефакторинга. В любом случае, такие элементы программы должны умереть с достоинством.
+
+#### Пример
+
+##### Плохо
+
+```ts
+function add(a, b) {
+  return a + b;
+}
+
+class Calculator {
+  multiply(a, b) {
+    return a * b;
+  }
+}
+```
+
+##### Хорошо
+
+```ts
+// Встраиваем функцию add в места ее вызова
+const result = (a, b) => a + b;
+
+// При необходимости убираем класс Calculator и используем прямые функции
+const result = (a, b) => a * b;
+```
+
+Путем встраивания функции add в места ее вызова мы избавляемся от "Ленивого элемента" и улучшаем читаемость кода. Если класс Calculator оказывается избыточным, мы можем просто использовать прямые функции для умножения, устраняя ненужную структуру.
+
+#### Посредник
+
+Одной из основных характеристик объектов является инкапсуляция — сокрытие внутренних деталей реализации от внешнего мира. Инкапсуляции часто сопутствует делегирование. Например, вы договариваетесь с директором о встрече. Он делегирует это сообщение своему календарю и дает вам ответ. Все хорошо и правильно. Совершенно не важно, использует ли директор ежедневник, электронное устройство или своего секретаря, чтобы вести расписание личных встреч.
+Однако такой подход может завести слишком далеко. Например, мы просматриваем интерфейс класса и обнаруживаем, что половина методов делегирует обработку другому классу. В таком случае нужно воспользоваться рефакторингом Удаление посредника и общаться с объектом, который действительно знает, что происходит.
+
+#### Пример
+
+##### Плохо
+
+```ts
+class Calendar {
+  addEvent(event) {
+    // some logic to add event
+  }
+}
+
+class Director {
+  calendar: Calendar;
+
+  constructor(calendar: Calendar) {
+    this.calendar = calendar;
+  }
+
+  scheduleMeeting(event) {
+    this.calendar.addEvent(event);
+  }
+}
+```
+
+##### Хорошо
+
+```ts
+// Удаляем посредника Director и напрямую используем Calendar
+class Calendar {
+  addEvent(event) {
+    // some logic to add event
+  }
+
+  scheduleMeeting(event) {
+    this.addEvent(event);
+  }
+}
+```
+
+Путем удаления посредника Director и напрямую использованием класса Calendar мы улучшаем структуру кода, уменьшаем избыточность и упрощаем взаимодействие между объектами.
+
+</details>
+
+### Слабая связанность
+
+<details><summary>Описание</summary>
+
+Если возвести Low Coupling в абсолют, то достаточно быстро можно прийти к тому, чтобы разместить всю функциональность в одном единственном классе. В таком случае связей не будет вообще, но все при этом понимают, что что-то тут явно не так, ведь в этот класс попадет совершенно несвязанная между собой бизнес — логика. Принцип High Cohesion говорит нам следующее: классы должны содержать связанную бизнес — логику.
+
+#### Пример
+
+##### Плохо
+
+```ts
+class OverloadedClass {
+  field1: number;
+  field2: string;
+  field3: boolean;
+  field4: Date;
+  field5: number;
+  field6: number;
+  field7: number;
+  field8: number;
+  field9: number;
+  field10: number;
+  // ... другие поля и методы
+}
+```
+
+##### Хорошо
+
+```ts
+class ExtractedClass {
+  field1: number;
+  field2: string;
+  // ... другие поля и методы, выделенные из исходного класса
+}
+
+class MainClass {
+  extractedClassInstance: ExtractedClass;
+  // ... другие поля и методы
+}
+```
+
+В примере с исправлением запаха был проведен рефакторинг с целью извлечения подмножества полей и методов из исходного класса. Был создан новый класс ExtractedClass, в который были выделены некоторые поля и методы из исходного класса OverloadedClass. Затем в основном классе MainClass было создано поле extractedClassInstance, представляющее экземпляр выделенного класса. Это позволяет уменьшить размер и сложность исходного класса, а также повысить читаемость и поддерживаемость кода.
+
+</details>
+
+### Вложенные условия
+
+<details><summary>Описание</summary>
+
+ Когда условия вложены друг в друга, код становится сложнее для чтения и понимания. Это может привести к ошибкам и неправильному пониманию логики программы, сложностям в отладке и ошибкам. Также вложенные условия могут привести к тому, что один метод или функция будет отвечать за слишком много вещей, что нарушает принцип единой ответственности.
+
+#### Плохо
+
+В данном примере из-за большого количества условий код становится сложным и трудночитаемым, а также содержит множество повторяющихся условий. Это может привести к ошибкам и трудностям при отладке.
+
+```ts
+const calculateDiscount = (price, quantity, isMember, isHoliday) => {
+  if (isMember) {
+    if (isHoliday) {
+      if (quantity > 10) {
+        return price * 0.8;
+      } else {
+        return price * 0.9;
+      }
+    } else {
+      if (quantity > 10) {
+        return price * 0.85;
+      } else {
+        return price * 0.95;
+      }
+    }
+  } else {
+    if (isHoliday) {
+      if (quantity > 10) {
+        return price * 0.9;
+      } else {
+        return price * 0.95;
+      }
+    } else {
+      if (quantity > 10) {
+        return price * 0.95;
+      } else {
+        return price * 1.0;
+      }
+    }
+  }
+}
+```
+
+#### Хорошо
+
+В хорошем примере мы используем переменные `discount`, `holidayDiscount` и `quantityDiscount` для хранения промежуточных результатов, что делает код более читаемым и понятным.
+
+```ts
+const calculateDiscount = (price, quantity, isMember, isHoliday) => {
+  const discount = isMember ? 0.9 : 1.0;
+  const holidayDiscount = isHoliday ? 0.9 : 1.0;
+  const quantityDiscount = quantity > 10 ? 0.95 : 1.0;
+  
+  return price * discount * holidayDiscount * quantityDiscount;
+}
+```
+
+</details>
+
+## Имена
+
+### N1: Используйте содержательные имена
+
+<details><summary>Описание</summary>
+
+Не торопитесь с выбором имен. Позаботьтесь о том, чтобы имена были со­держательными. Помните, что смысл может изменяться в ходе развития программного продукта; почаще переосмысливайте уместность выбранных вами имен.
+
+Не рассматривайте это как дополнительный «фактор комфортности». Имена в программных продуктах на 90% определяют удобочитаемость кода. Не жалейте времени на то, чтобы выбрать их осмысленно, и поддерживайте их актуальность. Имена слишком важны, чтобы относиться к ним легкомысленно.
+
+#### Пример №1
+
+##### Плохо
+
+```ts
+function calculate(a, b) {
+  return a + b;
+}
+```
+
+##### Хорошо
+
+```ts
+function calculateSum(a, b) {
+  return a + b;
+}
+```
+
+Использование более содержательных имен, таких как `calculateSum` вместо просто `calculate`, поможет сделать код более понятным и удобочитаемым.
+
+#### Пример №2
+
+##### Плохо
+
+У нас есть класс DaoCacheConfigProperties, у него есть две переменные — alive и elements. Из названий не совсем понятно, за что отвечают эти переменные. Если их нужно прокомментировать, то, скорее всего, этим переменным дано неправильное имя.
+
+```ts
+class DaoCacheConfigProperties {
+  alive: number; // alive cache time in days
+  elements: number; // maximum elements in cache
+}
+```
+
+##### Хорошо
+
+alive — количество в днях, сколько должен жить этот кэш, а elements — максимальное количество, сколько должно храниться в кэше это значение. Их можно было бы назвать по-другому, перенести комментарии в название переменной, например, timeToLiveInDays или maximumSavedElements.
+
+```ts
+class DaoCacheConfigProperties {
+  timeToLiveInDays: number; // alive cache time in days
+  maximumSavedElements: number; // maximum elements in cache
+}
+```
+
+</details>
+
+### N2: Выбирайте имена на подходящем уровне абстракции
+
+<details><summary>Описание</summary>
+
+Не используйте имена, передающие информацию о реализации. Имена должны отражать уровень абстракции, на котором работает класс или функция. Сделать это непросто — и снова потому, что люди слишком хорошо справляются со смешением разных уровней абстракции. При каждом просмотре кода вам с большой вероятностью попадется переменная, имя которой выбрано на слишком низком уровне. Воспользуйтесь случаем и измените его. Чтобы ваш код хорошо читался, вы должны серьезно относиться к его непрерывному совершенствованию.
+
+#### Пример
+
+##### Плохо
+
+```ts
+interface Modem {
+  dial: (phoneNumber: string) => boolean;
+  disconnect: () => boolean;
+  send: (c: char) => boolean;
+  recv: () => char;
+  getConnectedPhoneNumber: () => string;
+}
+```
+
+На первый взгляд все хорошо — имена функций выглядят разумно. В самом деле, во многих приложениях они точно соответствуют выполняемым операциям. А если для установления связи используется не коммутируемое подключение, а какой-то другой механизм? Например, модемы могут связываться на физическом уровне (как кабельные модемы, обеспечивающие доступ к Интернету во многих домах). А может быть, связь устанавливается посредством отправки номера порта коммутатору через интерфейс USB. Разумеется, концепция те­лефонных номеров в таких случаях относится к неверному уровню абстракции. Более правильная стратегия выбора имен в таких сценариях может выглядеть так:
+
+##### Хорошо
+
+```ts
+interface Modem {
+  connect: (connectionLocator: string) => boolean;
+  disconnect: () => boolean;
+  send: (c: char) => boolean;
+  recv: () => char;
+  getConnectedLocator: () => string;
+}
+```
+
+Теперь имена функций никак не ассоциируются с телефонными номерами. Они могут использоваться как для подключения по телефонной линии, так и для любой другой стратегии подключения.
+
+</details>
+
+</details>
+
+### N5: Используйте длинные имена для длинных областей видимости
+
+<details><summary>Описание</summary>
+
+Длина имени должна соответствовать длине его области видимости. Переменным с крошечной областью видимости можно присваивать очень короткие имена, но у переменных с большей областью видимости имена должны быть длинными.
+
+Если область видимости переменной составляет всего пять строк, то переменной можно присвоить имя `i` или `j`.
+
+#### Пример
+
+##### Плохо
+
+```ts
+const rollMany = (n: number, pins: number) => {
+  for (let rollCount = 0; rollCount < n; rollCount++) {
+    g.roll(pins);
+  }
+};
+```
+
+##### Хорошо
+
+```ts
+const rollMany = (n: number, pins: number) => {
+  for (let i = 0; i < n; i++) {
+    g.roll(pins);
+  }
+};
+```
+
+Смысл переменной `i` абсолютно очевиден. Какое-нибудь раздражающее имя вида `rollCount` только затемнило бы смысл этого тривиального кода. С другой стороны, смысл коротких имен переменных и функций рассеивается на длинных дистанциях. Таким образом, чем длиннее область видимости имени, тем более длинным и точным должно быть ее имя.
+
+</details>
+
+### N7: Имена должны описывать побочные эффекты
+
+<details><summary>Описание</summary>
+Имена должны описывать все, что делает функция, переменная или класс. Не скрывайте побочные эффекты за именами. Не используйте простые глаголы для описания функции, которая делает что-то помимо этой простой операции.
+
+#### Пример
+
+##### Плохо
+
+```ts
+updateComment(comment) {
+  if (this.getComment(comment.id)) {
+    return this.requestToUpdateComment(comment.id, comment);
+  }
+
+  return this.requestToCreateComment(comment);
+}
+```
+
+##### Хорошо
+
+```ts
+createOrUpdateComment(comment) {
+  if (this.getComment(comment.id)) {
+    return this.requestToUpdateComment(comment.id, comment);
+  }
+
+  return this.requestToCreateComment(comment);
+}
+```
+
+</details>
+
+## Тесты
+
+### T1: Нехватка тестов
+
+<details><summary>Описание</summary>
+
+Сколько тестов должен включать тестовый пакет? К сожалению, многие программисты руководствуются принципом «Пожалуй, этого хватит». Тестовый пакет должен тестировать все, что может сломаться. Если в системе остались условия, не проверенные тестами, или вычисления, правильность которых не подтверждена, значит, количество тестов недостаточно.
+
+</details>
